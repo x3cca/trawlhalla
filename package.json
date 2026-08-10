@@ -13,6 +13,6 @@
     "sync:bpc": "bun scripts/sync-upstream.mjs bpc"
   },
   "devDependencies": {
-    "fflate": "0.8.2"
+    "fflate": "0.8.3"
   }
 }
