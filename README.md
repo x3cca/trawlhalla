@@ -2,7 +2,7 @@
 
 Trawlhalla is a reproducible integration layer around two independently tracked upstreams:
 
-- [Trawl](https://github.com/germondai/trawl), providing the API, browser pool, tier orchestration and Camoufox runtime.
+- [Trawl](https://github.com/x3cca/trawl/tree/codex/aws-waf-captcha), temporarily pinned to the fork's AWS WAF challenge fix while it is reviewed upstream, providing the API, browser pool, tier orchestration and Camoufox runtime.
 - [Bypass Paywalls Clean Firefox uploads](https://gitflic.ru/project/magnolia1234/bpc_uploads), providing the pinned Firefox extension artifact.
 
 It also generates a separate Firefox extension from `config/custom-sites.json`. Local site support therefore does not require editing BPC or either upstream submodule.

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "trawl": {
-    "repository": "https://github.com/germondai/trawl.git",
-    "branch": "dev",
-    "commit": "85381c0e3d2b1744784e81db52eabac01105eb67"
+    "repository": "https://github.com/x3cca/trawl.git",
+    "branch": "codex/aws-waf-captcha",
+    "commit": "b59b3e97d04cb1dc3297eeb010f5c0f110b874ab"
   },
   "bpc": {
     "repository": "https://gitflic.ru/project/magnolia1234/bpc_uploads.git",

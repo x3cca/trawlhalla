@@ -20,18 +20,18 @@ index 117d78f..efe3d88 100644
      emit(t1)
      if (hasUsablePayload(t1)) {
 diff --git a/packages/tiers/src/tiers/2.ts b/packages/tiers/src/tiers/2.ts
-index 45ad067..9fdf50e 100644
+index c80b800..479c7ce 100644
 --- a/packages/tiers/src/tiers/2.ts
 +++ b/packages/tiers/src/tiers/2.ts
-@@ -3,6 +3,7 @@ import type { Cookie, SessionData, TierResult } from "@trawl/types"
- import { solvePageCaptchas } from "../solvers"
- import { normalizeSameSite, toCookies } from "../utils/cookies"
- import { hasAkamaiChallenge, isBlocked, isBrowserErrorPage, isCloudflarePage } from "../utils/detect"
+@@ -9,6 +9,7 @@ import {
+   isBrowserErrorPage,
+   isCloudflarePage,
+ } from "../utils/detect"
 +import { waitForDomSettle } from "../utils/domSettle"
  import { normalizeHtml } from "../utils/html"
  import { trackMainDocumentResponses } from "../utils/mainResponse"
  import { captureResponse, isTextContentType } from "../utils/response"
-@@ -100,6 +101,7 @@ export async function runTier2(
+@@ -110,6 +111,7 @@ export async function runTier2(
        captchasSolved = result.solved
      }
  
@@ -40,10 +40,10 @@ index 45ad067..9fdf50e 100644
      if (isCloudflarePage(finalHtml, mainResponse.headers)) {
        return { tier: 2, status: "blocked", durationMs: Date.now() - start, reason: "session-expired" }
 diff --git a/packages/tiers/src/tiers/3.ts b/packages/tiers/src/tiers/3.ts
-index a8d9779..3705357 100644
+index a5699ec..41345b4 100644
 --- a/packages/tiers/src/tiers/3.ts
 +++ b/packages/tiers/src/tiers/3.ts
-@@ -17,6 +17,7 @@ import { normalizeHtml } from "../utils/html"
+@@ -19,6 +19,7 @@ import { normalizeHtml } from "../utils/html"
  import { waitForImpervaResolution } from "../utils/impervaWait"
  import { trackMainDocumentResponses } from "../utils/mainResponse"
  import { isHardNetworkFailure } from "../utils/network"
@@ -51,8 +51,8 @@ index a8d9779..3705357 100644
  import { captureResponse, isTextContentType } from "../utils/response"
  import type { RouteLike } from "../utils/sanitize"
  import { routeContinueOverrides } from "../utils/sanitize"
-@@ -123,6 +124,7 @@ export async function runTier3(
-       captchasSolved = solveResult.solved
+@@ -132,6 +133,7 @@ export async function runTier3(
+       captchasSolved = [...new Set([...captchasSolved, ...solveResult.solved])]
      }
  
 +    await waitForDomSettle(page, maxTimeout - (Date.now() - start))
@@ -60,10 +60,10 @@ index a8d9779..3705357 100644
  
      // Empty shell means the browser got nothing — treat as a load failure
 diff --git a/packages/tiers/src/tiers/4.ts b/packages/tiers/src/tiers/4.ts
-index cfb74dd..9353102 100644
+index 420ff9a..399f843 100644
 --- a/packages/tiers/src/tiers/4.ts
 +++ b/packages/tiers/src/tiers/4.ts
-@@ -17,6 +17,7 @@ import { normalizeHtml } from "../utils/html"
+@@ -19,6 +19,7 @@ import { normalizeHtml } from "../utils/html"
  import { waitForImpervaResolution } from "../utils/impervaWait"
  import { trackMainDocumentResponses } from "../utils/mainResponse"
  import { isHardNetworkFailure } from "../utils/network"
@@ -71,8 +71,8 @@ index cfb74dd..9353102 100644
  import { captureResponse, isTextContentType } from "../utils/response"
  import type { RouteLike } from "../utils/sanitize"
  import { routeContinueOverrides } from "../utils/sanitize"
-@@ -113,6 +114,7 @@ export async function runTier4(
-       captchasSolved = solveResult.solved
+@@ -122,6 +123,7 @@ export async function runTier4(
+       captchasSolved = [...new Set([...captchasSolved, ...solveResult.solved])]
      }
  
 +    await waitForDomSettle(page, maxTimeout - (Date.now() - start))
@@ -81,7 +81,7 @@ index cfb74dd..9353102 100644
      if (html.length < 100) {
 diff --git a/packages/tiers/src/utils/browserPolicy.ts b/packages/tiers/src/utils/browserPolicy.ts
 new file mode 100644
-index 0000000..6db0bf7
+index 0000000..4b2cf3b
 --- /dev/null
 +++ b/packages/tiers/src/utils/browserPolicy.ts
 @@ -0,0 +1,53 @@
@@ -140,7 +140,7 @@ index 0000000..6db0bf7
 +}
 diff --git a/packages/tiers/src/utils/domSettle.ts b/packages/tiers/src/utils/domSettle.ts
 new file mode 100644
-index 0000000..7ad5ea2
+index 0000000..a16b891
 --- /dev/null
 +++ b/packages/tiers/src/utils/domSettle.ts
 @@ -0,0 +1,61 @@

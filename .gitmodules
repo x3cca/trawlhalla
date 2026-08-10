@@ -1,7 +1,7 @@
 [submodule "upstream/trawl"]
 	path = upstream/trawl
-	url = https://github.com/germondai/trawl.git
-	branch = dev
+	url = https://github.com/x3cca/trawl.git
+	branch = codex/aws-waf-captcha
 [submodule "upstream/bpc-uploads"]
 	path = upstream/bpc-uploads
 	url = https://gitflic.ru/project/magnolia1234/bpc_uploads.git
