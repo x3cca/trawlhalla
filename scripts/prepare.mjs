@@ -86,9 +86,17 @@ export async function buildCustomExtension(config, outputDir) {
     path.join(outputDir, "runtime-config.js"),
     `globalThis.TRAWLHALLA_SITE_CONFIG = ${JSON.stringify(runtimeConfig, null, 2)}\n`,
   )
+  const contentBundleFiles = ["runtime-config.js", ...modules.map((name) => `site-modules/${name}`), "content.js"]
+  const contentBundle = await Promise.all(
+    contentBundleFiles.map((name) => readFile(path.join(outputDir, name), "utf8")),
+  )
+  await writeFile(
+    path.join(outputDir, "content-bundle.js"),
+    `;(() => {\n${contentBundle.join("\n;\n")}\n;delete globalThis.TRAWLHALLA_SITE_CONFIG\n;delete globalThis.trawlhallaSiteModules\n})()\n`,
+  )
 
   const permissions = sites.length
-    ? ["cookies", "storage", "tabs", "webRequest", "webRequestBlocking", ...networkListenerPatterns]
+    ? ["cookies", "storage", "webRequest", "webRequestBlocking", ...networkListenerPatterns]
     : ["storage"]
   const manifest = {
     manifest_version: 2,

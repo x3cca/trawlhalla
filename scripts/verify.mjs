@@ -28,5 +28,5 @@ for (const workflowName of (await readdir(workflowsDir)).filter((name) => name.e
   }
 }
 
-run(process.execPath, ["test", "tests/config.test.mjs", "tests/generated.test.mjs"])
+run(process.execPath, ["test", "tests/config.test.mjs", "tests/generated.test.mjs", "tests/site-overrides.test.mjs"])
 console.log("Verification complete")

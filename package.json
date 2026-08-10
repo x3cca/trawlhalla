@@ -7,7 +7,7 @@
   "scripts": {
     "prepare": "bun scripts/prepare.mjs",
     "verify": "bun scripts/verify.mjs",
-    "test": "bun run prepare && bun test tests/config.test.mjs tests/generated.test.mjs",
+    "test": "bun run prepare && bun test tests/config.test.mjs tests/generated.test.mjs tests/site-overrides.test.mjs",
     "build:image": "bun scripts/build-image.mjs",
     "sync:trawl": "bun scripts/sync-upstream.mjs trawl",
     "sync:bpc": "bun scripts/sync-upstream.mjs bpc"

@@ -33,21 +33,6 @@ function siteForUrl(rawUrl) {
   return config.sites.find((site) => site.matches.some((pattern) => matches(pattern, rawUrl)))
 }
 
-async function injectSiteOverride(tabId, rawUrl) {
-  const site = siteForUrl(rawUrl)
-  if (!site) return
-  const marker = JSON.stringify(site.id)
-  const loaded = await api.tabs
-    .executeScript(tabId, {
-      code: `document.documentElement.dataset.trawlhallaSiteLoader === ${marker}`,
-    })
-    .catch(() => [])
-  if (loaded?.[0]) return
-  await api.tabs.executeScript(tabId, { file: "runtime-config.js" })
-  if (site.module) await api.tabs.executeScript(tabId, { file: `site-modules/${site.module}` })
-  await api.tabs.executeScript(tabId, { file: "content.js" })
-}
-
 function sourcePageUrl(details) {
   return details.documentUrl || details.originUrl || (details.type === "main_frame" ? details.url : "")
 }
@@ -79,13 +64,6 @@ if (config.networkListenerPatterns.length > 0) {
     ["blocking", "requestHeaders"],
   )
 }
-
-// Camoufox installs unpacked add-ons temporarily. Firefox can occasionally miss
-// static content-script registration for that installation mode, so inject the
-// same narrowly scoped scripts after navigation as a fallback.
-api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === "complete") void injectSiteOverride(tabId, tab.url).catch(() => {})
-})
 
 api.runtime.onMessage.addListener(async (message, sender) => {
   if (message?.type !== "trawlhalla:clean-cookies" || typeof message.siteId !== "string") return

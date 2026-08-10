@@ -35,8 +35,22 @@ describe("generated integration", () => {
     expect(manifest.content_scripts[0].matches).not.toContain("*://*.example.com/*")
     expect(manifest.permissions).toContain("*://*.404media.co/*")
     expect(manifest.permissions).toContain("*://*.aftermath.site/*")
-    expect(manifest.permissions).toContain("tabs")
+    expect(manifest.permissions).not.toContain("tabs")
+    expect(manifest.permissions).not.toContain("webNavigation")
     expect(manifest.permissions).not.toContain("*://*.example.com/*")
+  })
+
+  test("installs the site companion in Trawl's private browser contexts", async () => {
+    const poolPath = path.join(rootDir, ".build", "trawl", "packages", "browser", "src", "pool.ts")
+    const pool = await readFile(poolPath, "utf8")
+    expect(pool).toContain('...(addonDirs.length > 0 ? { "extensions.allowPrivateBrowsingByDefault": true } : {})')
+    expect(pool).toContain("CAMOUFOX_CONTEXT_INIT_SCRIPT_FILES")
+    expect(pool).toContain("context.addInitScript({ path: scriptPath })")
+
+    const dockerfile = await readFile(path.join(rootDir, "integration", "Dockerfile"), "utf8")
+    expect(dockerfile).toContain(
+      "CAMOUFOX_CONTEXT_INIT_SCRIPT_FILES=/opt/camoufox/addons/TRAWLHALLA_CUSTOM/content-bundle.js",
+    )
   })
 
   test("keeps pinned BPC enabled without a runtime updater", async () => {
@@ -54,6 +68,7 @@ describe("generated integration", () => {
       ".build/addons/site-overrides/runtime-config.js",
       ".build/addons/site-overrides/background.js",
       ".build/addons/site-overrides/content.js",
+      ".build/addons/site-overrides/content-bundle.js",
       ".build/addons/site-overrides/site-modules/aftermath.js",
     ]) {
       const source = await readFile(path.join(rootDir, relative), "utf8")

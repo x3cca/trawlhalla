@@ -1,5 +1,6 @@
 "use strict"
 
+;(() => {
 const api = globalThis.browser ?? globalThis.chrome
 const config = globalThis.TRAWLHALLA_SITE_CONFIG
 
@@ -23,11 +24,20 @@ function matches(pattern, rawUrl) {
 }
 
 const site = config.sites.find((candidate) => candidate.matches.some((pattern) => matches(pattern, location.href)))
+const siteModule = site ? globalThis.trawlhallaSiteModules?.[site.id] : undefined
 
-if (site && document.documentElement.dataset.trawlhallaSiteLoader !== site.id) {
+const loadSiteOverride = () => {
+  if (!site) return
+  if (document.readyState === "loading" || !document.documentElement) {
+    document.addEventListener("DOMContentLoaded", loadSiteOverride, { once: true })
+    return
+  }
+  if (document.documentElement.dataset.trawlhallaSiteLoader === site.id) return
+
   document.documentElement.dataset.trawlhallaSiteLoader = site.id
   let firstRun = true
   let applying = false
+  let rerunRequested = false
 
   const elements = (selector) => {
     try {
@@ -39,7 +49,10 @@ if (site && document.documentElement.dataset.trawlhallaSiteLoader !== site.id) {
   }
 
   const apply = async () => {
-    if (applying) return
+    if (applying) {
+      rerunRequested = true
+      return
+    }
     applying = true
     try {
       for (const selector of site.actions.remove) {
@@ -82,9 +95,8 @@ if (site && document.documentElement.dataset.trawlhallaSiteLoader !== site.id) {
       if (firstRun) {
         for (const selector of site.actions.click) elements(selector)[0]?.click()
       }
-      const module = globalThis.trawlhallaSiteModules?.[site.id]
-      if (typeof module === "function") await module({ document, location, site, firstRun })
-      if (firstRun && site.cookies.remove.length > 0) {
+      if (typeof siteModule === "function") await siteModule({ document, location, site, firstRun })
+      if (firstRun && site.cookies.remove.length > 0 && api?.runtime?.sendMessage) {
         await api.runtime
           .sendMessage({ type: "trawlhalla:clean-cookies", siteId: site.id, pageUrl: location.href })
           .catch(() => {})
@@ -95,11 +107,21 @@ if (site && document.documentElement.dataset.trawlhallaSiteLoader !== site.id) {
       firstRun = false
     } finally {
       applying = false
+      if (rerunRequested) {
+        rerunRequested = false
+        void apply()
+      }
     }
   }
 
   void apply()
-  const observer = new MutationObserver(() => void apply())
+  const observer = new MutationObserver(() => {
+    if (applying) rerunRequested = true
+    else void apply()
+  })
   observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true })
   setTimeout(() => observer.disconnect(), site.observeMs)
 }
+
+loadSiteOverride()
+})()

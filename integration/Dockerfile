@@ -26,6 +26,7 @@ COPY .build/runtime/browser-policy.json /opt/trawlhalla/browser-policy.json
 COPY .build/licenses/ /licenses/
 
 ENV CAMOUFOX_ADDON_DIRS=/opt/camoufox/addons/BPC,/opt/camoufox/addons/TRAWLHALLA_CUSTOM \
+    CAMOUFOX_CONTEXT_INIT_SCRIPT_FILES=/opt/camoufox/addons/TRAWLHALLA_CUSTOM/content-bundle.js \
     TRAWL_FORCE_BROWSER_PATTERNS_FILE=/opt/trawlhalla/browser-policy.json \
     TRAWL_DOM_SETTLE_MIN_MS=1500 \
     TRAWL_DOM_SETTLE_STABLE_MS=750 \
