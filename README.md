@@ -84,6 +84,8 @@ bun run verify
 
 Each command advances one submodule and updates `upstream.lock.json`. Commit Trawl and BPC updates separately. CI also checks for updates on a schedule and opens separate PRs.
 
+The scheduled `Upstream sync` workflow runs daily as independent `Sync Trawl` and `Sync BPC Firefox extension` jobs. A compatible update opens a focused PR. An incompatible update leaves the corresponding job failed, adds a diagnostic job summary, and opens no PR; that failed run is the intended queue item for an integration-fix agent.
+
 Never edit files under `upstream/` directly. Integration changes belong in `patches/trawl/`, `patches/bpc/`, `extensions/`, `config/`, or `scripts/`.
 
 ## Build products

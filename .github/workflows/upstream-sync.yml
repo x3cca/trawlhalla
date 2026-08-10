@@ -3,7 +3,7 @@ name: Upstream sync
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 9 * * 1,4"
+    - cron: "17 9 * * *"
 
 permissions:
   contents: write
@@ -11,12 +11,17 @@ permissions:
 
 jobs:
   sync:
+    name: Sync ${{ matrix.label }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        upstream: [trawl, bpc]
+        include:
+          - upstream: trawl
+            label: Trawl
+          - upstream: bpc
+            label: BPC Firefox extension
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -58,3 +63,21 @@ jobs:
             --head "$branch" \
             --title "chore: sync ${UPSTREAM} upstream" \
             --body "Automated single-upstream update. Verification passed; review the lock, permission, and patch changes before merging."
+      - name: Record failed sync for the agent queue
+        if: failure()
+        env:
+          UPSTREAM: ${{ matrix.upstream }}
+          LABEL: ${{ matrix.label }}
+        shell: bash
+        run: |
+          {
+            echo "## ${LABEL} sync needs integration work"
+            echo
+            echo "The automated ${UPSTREAM} update did not pass its integration gates."
+            echo "Use this failed job and its logs as the maintenance queue item; no update PR was opened."
+            echo
+            echo '```text'
+            git status --short
+            git diff -- upstream.lock.json
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
