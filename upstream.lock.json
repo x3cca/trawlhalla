@@ -3,7 +3,7 @@
   "trawl": {
     "repository": "https://github.com/x3cca/trawl.git",
     "branch": "codex/aws-waf-captcha",
-    "commit": "b59b3e97d04cb1dc3297eeb010f5c0f110b874ab"
+    "commit": "4fd7d1e6076868a0d51d6756d6b89ac80397be69"
   },
   "bpc": {
     "repository": "https://gitflic.ru/project/magnolia1234/bpc_uploads.git",
