@@ -22,15 +22,21 @@ describe("generated integration", () => {
     const modulePath = path.join(rootDir, ".build", "trawl", "packages", "tiers", "src", "utils", "browserPolicy.ts")
     const policyModule = await import(`${pathToFileURL(modulePath).href}?test=${Date.now()}`)
     expect(policyModule.shouldForceBrowser("https://www.ft.com/content/example")).toBe(true)
+    expect(policyModule.shouldForceBrowser("https://www.404media.co/example")).toBe(true)
+    expect(policyModule.shouldForceBrowser("https://aftermath.site/example")).toBe(true)
     expect(policyModule.shouldForceBrowser("https://example.invalid/article")).toBe(false)
   })
 
-  test("keeps disabled custom sites out of the generated manifest", async () => {
+  test("includes only enabled custom sites in the generated manifest", async () => {
     const manifest = JSON.parse(
       await readFile(path.join(rootDir, ".build", "addons", "site-overrides", "manifest.json"), "utf8"),
     )
-    expect(manifest.content_scripts).toBeUndefined()
-    expect(manifest.permissions).toEqual(["storage"])
+    expect(manifest.content_scripts[0].matches).toEqual(["*://*.404media.co/*", "*://*.aftermath.site/*"])
+    expect(manifest.content_scripts[0].matches).not.toContain("*://*.example.com/*")
+    expect(manifest.permissions).toContain("*://*.404media.co/*")
+    expect(manifest.permissions).toContain("*://*.aftermath.site/*")
+    expect(manifest.permissions).toContain("tabs")
+    expect(manifest.permissions).not.toContain("*://*.example.com/*")
   })
 
   test("keeps pinned BPC enabled without a runtime updater", async () => {
@@ -48,6 +54,7 @@ describe("generated integration", () => {
       ".build/addons/site-overrides/runtime-config.js",
       ".build/addons/site-overrides/background.js",
       ".build/addons/site-overrides/content.js",
+      ".build/addons/site-overrides/site-modules/aftermath.js",
     ]) {
       const source = await readFile(path.join(rootDir, relative), "utf8")
       expect(() => new Function(source)).not.toThrow()

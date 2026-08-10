@@ -5,6 +5,63 @@
   },
   "sites": [
     {
+      "id": "404-media",
+      "enabled": true,
+      "description": "Route 404 Media through the browser tier and remove its paid-member access gate.",
+      "matches": [
+        "*://*.404media.co/*"
+      ],
+      "forceBrowser": true,
+      "cookies": {
+        "remove": []
+      },
+      "network": {
+        "permissions": [],
+        "block": [],
+        "requestHeaders": {}
+      },
+      "actions": {
+        "remove": [
+          "div.post-access-cta"
+        ],
+        "unwrap": [],
+        "unhide": [],
+        "removeClasses": [],
+        "removeAttributes": [],
+        "setAttributes": [],
+        "styles": [],
+        "click": []
+      }
+    },
+    {
+      "id": "aftermath",
+      "enabled": true,
+      "description": "Route Aftermath through the browser tier and recover legacy gated posts from embedded page data when available.",
+      "matches": [
+        "*://*.aftermath.site/*"
+      ],
+      "forceBrowser": true,
+      "cookies": {
+        "remove": []
+      },
+      "network": {
+        "permissions": [],
+        "block": [],
+        "requestHeaders": {}
+      },
+      "actions": {
+        "remove": [],
+        "unwrap": [],
+        "unhide": [],
+        "removeClasses": [],
+        "removeAttributes": [],
+        "setAttributes": [],
+        "styles": [],
+        "click": []
+      },
+      "module": "aftermath.js"
+    },
+    {
       "id": "example-news",
       "enabled": false,
       "description": "Disabled example showing the supported custom-site actions.",

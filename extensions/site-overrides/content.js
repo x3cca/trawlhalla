@@ -24,7 +24,8 @@ function matches(pattern, rawUrl) {
 
 const site = config.sites.find((candidate) => candidate.matches.some((pattern) => matches(pattern, location.href)))
 
-if (site) {
+if (site && document.documentElement.dataset.trawlhallaSiteLoader !== site.id) {
+  document.documentElement.dataset.trawlhallaSiteLoader = site.id
   let firstRun = true
   let applying = false
 
@@ -88,7 +89,9 @@ if (site) {
           .sendMessage({ type: "trawlhalla:clean-cookies", siteId: site.id, pageUrl: location.href })
           .catch(() => {})
       }
-      document.documentElement.dataset.trawlhallaSite = site.id
+      if (document.documentElement.dataset.trawlhallaSite !== site.id) {
+        document.documentElement.dataset.trawlhallaSite = site.id
+      }
       firstRun = false
     } finally {
       applying = false

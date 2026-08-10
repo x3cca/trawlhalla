@@ -88,7 +88,7 @@ export async function buildCustomExtension(config, outputDir) {
   )
 
   const permissions = sites.length
-    ? ["cookies", "storage", "webRequest", "webRequestBlocking", ...networkListenerPatterns]
+    ? ["cookies", "storage", "tabs", "webRequest", "webRequestBlocking", ...networkListenerPatterns]
     : ["storage"]
   const manifest = {
     manifest_version: 2,
