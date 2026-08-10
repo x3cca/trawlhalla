@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "trawl": {
     "repository": "https://github.com/x3cca/trawl.git",
-    "branch": "codex/aws-waf-captcha",
-    "commit": "4fd7d1e6076868a0d51d6756d6b89ac80397be69"
+    "branch": "codex/aws-waf-captcha-iteration",
+    "commit": "592f3372e8eeb09ccb9c6a5a4062ec2bbf8db2d1"
   },
   "bpc": {
     "repository": "https://gitflic.ru/project/magnolia1234/bpc_uploads.git",
