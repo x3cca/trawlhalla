@@ -41,6 +41,8 @@ Supported BPC and enabled custom-site patterns automatically skip Trawl's plain 
 
 A browser-tier `200` means the page rendered successfully; it does not guarantee that a BPC rule recovered full article text. Some BPC rules, including Financial Times, may fall back to an external archive link when no usable snapshot is available. Callers that require article text should validate the returned `html` rather than relying on status alone.
 
+The Bloomberg HUMAN/PerimeterX challenge classification and sanitized reproduction notes are in [`docs/bloomberg-human-challenge.md`](docs/bloomberg-human-challenge.md).
+
 ## Adding a custom site
 
 Edit `config/custom-sites.json`, add a unique site object, and set `enabled` to `true`. A site can declare:

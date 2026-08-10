@@ -27,6 +27,19 @@ describe("generated integration", () => {
     expect(policyModule.shouldForceBrowser("https://example.invalid/article")).toBe(false)
   })
 
+  test("classifies the sanitized Bloomberg HUMAN wall without Akamai markers", async () => {
+    const fixture = await readFile(path.join(rootDir, "tests", "fixtures", "bloomberg-human-challenge.html"), "utf8")
+    const detectPath = path.join(rootDir, ".build", "trawl", "packages", "tiers", "src", "utils", "detect.ts")
+    const detect = await import(`${pathToFileURL(detectPath).href}?human=${Date.now()}`)
+
+    expect(detect.hasHumanChallenge(fixture)).toBe(true)
+    expect(detect.hasAkamaiChallenge(fixture)).toBe(false)
+    expect(detect.detectChallengeType(fixture)).toBe("human")
+    expect(detect.isBlocked(200, fixture, {})).toBe(true)
+    expect(detect.isChallengeWall(200, fixture.length, "human")).toBe(true)
+    expect(detect.hasHumanChallenge("<html><title>Normal article</title><body>human interest</body></html>")).toBe(false)
+  })
+
   test("includes only enabled custom sites in the generated manifest", async () => {
     const manifest = JSON.parse(
       await readFile(path.join(rootDir, ".build", "addons", "site-overrides", "manifest.json"), "utf8"),

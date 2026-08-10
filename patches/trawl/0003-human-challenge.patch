@@ -1,0 +1,343 @@
+diff --git a/packages/tiers/src/index.ts b/packages/tiers/src/index.ts
+index 5dba88c..7b80a5a 100644
+--- a/packages/tiers/src/index.ts
++++ b/packages/tiers/src/index.ts
+@@ -13,8 +13,9 @@ export {
+   getAwsWafAction,
+   hasAkamaiChallenge,
+   hasAwsWafCaptcha,
+   hasAwsWafInterstitial,
+   hasHcaptcha,
++  hasHumanChallenge,
+   hasImpervaChallenge,
+   hasRecaptcha,
+   hasTurnstile,
+diff --git a/packages/tiers/src/tiers/1.ts b/packages/tiers/src/tiers/1.ts
+index a4c5b23..0fa1af7 100644
+--- a/packages/tiers/src/tiers/1.ts
++++ b/packages/tiers/src/tiers/1.ts
+@@ -4,8 +4,9 @@ import {
+   getAwsWafAction,
+   hasAkamaiChallenge,
+   hasAwsWafCaptcha,
+   hasAwsWafInterstitial,
+   hasHcaptcha,
++  hasHumanChallenge,
+   hasRecaptcha,
+   hasTurnstile,
+   isBlocked,
+@@ -143,6 +144,19 @@ export async function runTier1(
+       }
+     }
+ 
++    if (hasHumanChallenge(previewText, responseHeaders)) {
++      return {
++        tier: 1,
++        status: "needs-js",
++        durationMs: Date.now() - start,
++        reason: "human-challenge",
++        responseHeaders,
++        contentType,
++        body: rawBytes,
++        statusCode: res.status,
++      }
++    }
++
+     if (isBlocked(res.status, previewText, responseHeaders)) {
+       return {
+         tier: 1,
+diff --git a/packages/tiers/src/tiers/2.ts b/packages/tiers/src/tiers/2.ts
+index 273976f..875b3fd 100644
+--- a/packages/tiers/src/tiers/2.ts
++++ b/packages/tiers/src/tiers/2.ts
+@@ -4,7 +4,8 @@ import { solvePageCaptchas } from "../solvers"
+ import { normalizeSameSite, toCookies } from "../utils/cookies"
+ import {
+   hasAkamaiChallenge,
+   hasAwsWafInterstitial,
++  hasHumanChallenge,
+   isBlocked,
+   isBrowserErrorPage,
+   isCloudflarePage,
+@@ -95,6 +96,10 @@ export async function runTier2(
+       return { tier: 2, status: "blocked", durationMs: Date.now() - start, reason: "akamai-session-expired" }
+     }
+ 
++    if (hasHumanChallenge(html)) {
++      return { tier: 2, status: "blocked", durationMs: Date.now() - start, reason: "human-session-expired" }
++    }
++
+     if (isBlocked(mainResponse.status, html, mainResponse.headers)) {
+       return { tier: 2, status: "blocked", durationMs: Date.now() - start, reason: `http-${mainResponse.status}` }
+     }
+diff --git a/packages/tiers/src/tiers/3.ts b/packages/tiers/src/tiers/3.ts
+index 4a71d36..36d8cf8 100644
+--- a/packages/tiers/src/tiers/3.ts
++++ b/packages/tiers/src/tiers/3.ts
+@@ -10,9 +11,11 @@ import {
+   hasAkamaiChallenge,
+   hasAwsWafInterstitial,
+   hasImpervaChallenge,
++  hasHumanChallenge,
+   isBlocked,
+   isBrowserErrorPage,
+   isCloudflarePage,
+ } from "../utils/detect"
+ import { normalizeHtml } from "../utils/html"
++import { waitForHumanResolution } from "../utils/humanWait"
+ import { waitForImpervaResolution } from "../utils/impervaWait"
+@@ -98,6 +101,8 @@ export async function runTier3(
+         challengeType === "imperva"
+           ? await waitForImpervaResolution(page, remaining, url)
+           : challengeType === "akamai"
+             ? await waitForAkamaiResolution(page, remaining, url)
++            : challengeType === "human"
++              ? await waitForHumanResolution(page, remaining, url)
+             : await waitForChallengeResolution(page, remaining, url, () => mainResponse.headers)
+     }
+@@ -113,6 +118,8 @@ export async function runTier3(
+             ? challengeType === "imperva"
+               ? "datacenter-ip-blocked (imperva sensor cookie obtained but challenge persisted — needs residential proxy)"
+               : challengeType === "akamai"
+                 ? "datacenter-ip-blocked (Akamai sensor cookie obtained but challenge persisted — needs residential proxy)"
++                : challengeType === "human"
++                  ? "datacenter-ip-blocked (HUMAN challenge persisted — needs residential proxy)"
+                 : "datacenter-ip-blocked (cf_clearance obtained but redirect never completed — needs residential proxy)"
+             : `${challengeType === "none" ? "cloudflare" : challengeType}-challenge-timeout`,
+@@ -175,6 +182,13 @@ export async function runTier3(
+       return { tier: 3, status: "blocked", durationMs: Date.now() - start, reason: "akamai-persistent" }
+     }
+ 
++    if (hasHumanChallenge(html)) {
++      const pageTitle = await page.title().catch(() => "?")
++      const pageUrl = page.url()
++      console.log(`[tier3] human-persistent: url="${pageUrl}" title="${pageTitle}" html=${html.length}b`)
++      return { tier: 3, status: "blocked", durationMs: Date.now() - start, reason: "human-persistent" }
++    }
++
+     if (isBlocked(mainResponse.status, html, mainResponse.headers)) {
+       return { tier: 3, status: "blocked", durationMs: Date.now() - start, reason: `http-${mainResponse.status}` }
+     }
+diff --git a/packages/tiers/src/tiers/4.ts b/packages/tiers/src/tiers/4.ts
+index 1e2fbb8..c2f4e87 100644
+--- a/packages/tiers/src/tiers/4.ts
++++ b/packages/tiers/src/tiers/4.ts
+@@ -10,9 +11,11 @@ import {
+   hasAkamaiChallenge,
+   hasAwsWafInterstitial,
+   hasImpervaChallenge,
++  hasHumanChallenge,
+   isBlocked,
+   isBrowserErrorPage,
+   isCloudflarePage,
+ } from "../utils/detect"
+ import { normalizeHtml } from "../utils/html"
++import { waitForHumanResolution } from "../utils/humanWait"
+ import { waitForImpervaResolution } from "../utils/impervaWait"
+@@ -94,6 +97,8 @@ export async function runTier4(
+         challengeType === "imperva"
+           ? await waitForImpervaResolution(page, remaining, url)
+           : challengeType === "akamai"
+             ? await waitForAkamaiResolution(page, remaining, url)
++            : challengeType === "human"
++              ? await waitForHumanResolution(page, remaining, url)
+             : await waitForChallengeResolution(page, remaining, url, () => mainResponse.headers)
+     }
+@@ -163,5 +163,14 @@ export async function runTier4(
+         reason: "imperva-persistent",
+       }
+     }
+ 
++    if (hasHumanChallenge(html)) {
++      return {
++        tier: 4,
++        status: "blocked",
++        durationMs: Date.now() - start,
++        reason: "human-persistent",
++      }
++    }
++
+     if (hasAkamaiChallenge(html)) {
+diff --git a/packages/tiers/src/utils/detect.ts b/packages/tiers/src/utils/detect.ts
+index 9c4b8f9..a7df0b6 100644
+--- a/packages/tiers/src/utils/detect.ts
++++ b/packages/tiers/src/utils/detect.ts
+@@ -7,4 +7,5 @@ export type ChallengeType =
+   | "cap"
+   | "imperva"
+   | "akamai"
++  | "human"
+   | "none"
+@@ -136,6 +137,26 @@ export function hasImpervaChallenge(html: string, headers: Record<string, string> = {}): boolean {
+   return false
+ }
+ 
++// HUMAN Bot Defender (formerly PerimeterX) block page. The /tosv2.html path,
++// px-captcha mount, and captcha.px-cdn.net loader are stable challenge signals.
++// Keep the checks conjunctive so a normal page mentioning HUMAN or loading
++// unrelated scripts is not classified as a wall.
++export function hasHumanChallenge(html: string, headers: Record<string, string> = {}): boolean {
++  const hasPxBlockHeader = Object.keys(headers).some((name) => /^x-px-(?:block|captcha|challenge)/i.test(name))
++  if (hasPxBlockHeader) return true
++
++  const hasCaptchaMount = /<px-captcha\b|(?:id|class)=["'][^"']*px-captcha/i.test(html)
++  const hasCaptchaHost = /captcha\.px-(?:cdn|cloud)\.net/i.test(html)
++  const hasRobotTitle = /<title[^>]*>[^<]*(?:are you a robot|unusual activity)[^<]*<\/title>/i.test(html)
++  const hasToSPage = /(?:^|[\/"'])tosv2\.html(?:[?#\/"']|$)/i.test(html)
++  const hasAppSignal = /_pxAppId|press[\s&-]+hold/i.test(html)
++
++  return (
++    (hasToSPage && (hasCaptchaHost || hasCaptchaMount || hasRobotTitle)) ||
++    (hasCaptchaMount && (hasCaptchaHost || hasRobotTitle || hasAppSignal))
++  )
++}
++
+ // Akamai Bot Manager "Behavioral Detection" (sec-cpt / SBSD) interstitial. Akamai
+ // serves a near-empty page whose only real content is a hidden #sec-if-cpt-container
+ // (the "behavioral-content" widget, often a press-and-hold button) plus an obfuscated
+@@ -150,5 +179,6 @@ export function detectChallengeType(html: string, headers: Record<string, string> = {}): ChallengeType {
+   if (hasTurnstile(html)) return "cloudflare-turnstile"
+   if (isCloudflarePage(html, headers)) return "cloudflare-interstitial"
+   if (hasImpervaChallenge(html, headers)) return "imperva"
++  if (hasHumanChallenge(html, headers)) return "human"
+   if (hasAkamaiChallenge(html, headers)) return "akamai"
+   if (hasHcaptcha(html)) return "hcaptcha"
+@@ -165,4 +195,5 @@ export function isBlocked(status: number, html: string, headers: Record<string, string> = {}): boolean {
+   if (isCloudflarePage(html, {})) return true
+   if (hasImpervaChallenge(html)) return true
++  if (hasHumanChallenge(html, headers)) return true
+   if (hasAkamaiChallenge(html)) return true
+   return false
+@@ -174,5 +205,6 @@ export function needsJs(html: string, headers: Record<string, string>): boolean {
+     isCloudflarePage(html, headers) ||
+     hasAwsWafInterstitial(html, headers) ||
+     hasImpervaChallenge(html, headers) ||
++    hasHumanChallenge(html, headers) ||
+     hasAkamaiChallenge(html, headers)
+   )
+@@ -194,6 +226,6 @@ export function isChallengeWall(status: number, bodyLength: number, challengeType: ChallengeType): boolean {
+   if (challengeType === "aws-waf" && (status === 202 || status === 405)) return true
+   if (status === 403 || status === 503) return true
+-  if (challengeType === "akamai") return true
++  if (challengeType === "akamai" || challengeType === "human") return true
+   const threshold = LEAN_BODY_THRESHOLDS[challengeType]
+   if (threshold !== undefined && bodyLength < threshold) return true
+   return false
+diff --git a/packages/tiers/src/utils/humanWait.ts b/packages/tiers/src/utils/humanWait.ts
+new file mode 100644
+index 0000000..61f09bf
+--- /dev/null
++++ b/packages/tiers/src/utils/humanWait.ts
+@@ -0,0 +1,112 @@
++import type { Page } from "patchright"
++import { hasHumanChallenge } from "./detect"
++
++const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
++
++const hostnameFor = (url?: string) => {
++  try {
++    return url ? new URL(url).hostname : ""
++  } catch {
++    return ""
++  }
++}
++
++export async function waitForHumanResolution(
++  page: Page,
++  timeoutMs: number,
++  originalUrl?: string,
++): Promise<"ok" | "ip-blocked" | "timeout"> {
++  const deadline = Date.now() + Math.max(timeoutMs, 0)
++  if (Date.now() >= deadline) return "timeout"
++
++  const targetHost = hostnameFor(originalUrl ?? page.url())
++  let challengeSeen = false
++  let heldOnce = false
++  let trustCookieAt: number | undefined
++
++  await sleep(Math.min(300, Math.max(deadline - Date.now(), 0)))
++
++  while (Date.now() < deadline) {
++    const html = await page.content().catch(() => "")
++    const url = page.url()
++    const active = hasHumanChallenge(html) || /\/tosv2\.html(?:[?#]|$)/i.test(url)
++
++    if (!active) {
++      if (challengeSeen) await page.waitForLoadState("load", { timeout: 5000 }).catch(() => {})
++      return "ok"
++    }
++    challengeSeen = true
++
++    if (!heldOnce && deadline - Date.now() > 5_500) heldOnce = await pressAndHold(page, deadline)
++
++    if (await hasTrustCookie(page, targetHost)) {
++      if (trustCookieAt === undefined) trustCookieAt = Date.now()
++      if (originalUrl && Date.now() - trustCookieAt > 2_000) {
++        await page.goto(originalUrl, { waitUntil: "domcontentloaded", timeout: 15_000 }).catch(() => {})
++        await page.waitForLoadState("load", { timeout: 5_000 }).catch(() => {})
++        const resolved = await page.content().catch(() => "")
++        return resolved && !hasHumanChallenge(resolved) && !/\/tosv2\.html(?:[?#]|$)/i.test(page.url())
++          ? "ok"
++          : "ip-blocked"
++      }
++    }
++
++    await sleep(Math.min(350, Math.max(deadline - Date.now(), 0)))
++  }
++
++  return "timeout"
++}
++
++async function hasTrustCookie(page: Page, targetHost: string): Promise<boolean> {
++  if (!targetHost) return false
++  const cookies: Array<{ name: string; domain: string }> = await page
++    .context()
++    .cookies()
++    .catch(() => [])
++  return cookies.some(
++    (cookie) =>
++      /^(?:_px2|_px3)$/i.test(cookie.name) &&
++      (cookie.domain === targetHost ||
++        cookie.domain === `.${targetHost}` ||
++        targetHost.endsWith(cookie.domain.replace(/^\./, ""))),
++  )
++}
++
++async function pressAndHold(page: Page, deadline: number): Promise<boolean> {
++  const selectors = [
++    "#px-captcha button",
++    "#px-captcha [role='button']",
++    ".px-captcha-container button",
++    ".px-captcha-container [role='button']",
++    "#px-captcha",
++    ".px-captcha-container",
++  ]
++  let mouseDown = false
++  try {
++    for (const selector of selectors) {
++      if (Date.now() >= deadline) return false
++      const element = page.locator(selector).first()
++      if (!(await element.isVisible({ timeout: 400 }).catch(() => false))) continue
++      const box = await element.boundingBox().catch(() => undefined)
++      if (!box || box.width < 4 || box.height < 4) continue
++      const cx = box.x + box.width / 2
++      const cy = box.y + box.height / 2
++      await page.mouse.move(Math.max(2, cx - 18), Math.max(2, cy - 10), { steps: 6 })
++      await page.mouse.move(cx, cy, { steps: 8 })
++      await page.mouse.down()
++      mouseDown = true
++      const holdUntil = Math.min(deadline, Date.now() + 5_000)
++      while (Date.now() < holdUntil) {
++        await page.mouse.move(cx + (Math.random() - 0.5) * 3, cy + (Math.random() - 0.5) * 3, { steps: 2 })
++        await sleep(Math.min(220, Math.max(holdUntil - Date.now(), 0)))
++      }
++      console.log("[human] press-and-hold performed")
++      return true
++    }
++  } catch {
++    return false
++  } finally {
++    if (mouseDown) await page.mouse.up().catch(() => {})
++  }
++  return false
++}
