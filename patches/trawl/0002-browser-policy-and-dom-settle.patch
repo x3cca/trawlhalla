@@ -1,0 +1,207 @@
+diff --git a/packages/tiers/src/orchestrator.ts b/packages/tiers/src/orchestrator.ts
+index 117d78f..efe3d88 100644
+--- a/packages/tiers/src/orchestrator.ts
++++ b/packages/tiers/src/orchestrator.ts
+@@ -6,6 +6,7 @@ import { runTier2 } from "./tiers/2"
+ import { runTier3 } from "./tiers/3"
+ // Tier 4 (residential proxy) is dynamically imported only when needed.
+ import type { runTier4 } from "./tiers/4"
++import { shouldForceBrowser } from "./utils/browserPolicy"
+ import { normalizeHtml } from "./utils/html"
+ import type { ProxyPool } from "./utils/proxyRotator"
+ import { requireContentTypeForBody, sanitizeHeaders } from "./utils/sanitize"
+@@ -65,7 +66,7 @@ export async function scrape(req: ScrapeRequest, deps: OrchestratorDeps): Promis
+   }
+ 
+   // Tier 1: plain HTTP fetch
+-  if (!req.skipHttp && maxTier >= 1) {
++  if (!req.skipHttp && !shouldForceBrowser(req.url) && maxTier >= 1) {
+     const t1 = await runTier1(req.url, sanitizedHeaders, req.method, req.body)
+     emit(t1)
+     if (hasUsablePayload(t1)) {
+diff --git a/packages/tiers/src/tiers/2.ts b/packages/tiers/src/tiers/2.ts
+index 45ad067..9fdf50e 100644
+--- a/packages/tiers/src/tiers/2.ts
++++ b/packages/tiers/src/tiers/2.ts
+@@ -3,6 +3,7 @@ import type { Cookie, SessionData, TierResult } from "@trawl/types"
+ import { solvePageCaptchas } from "../solvers"
+ import { normalizeSameSite, toCookies } from "../utils/cookies"
+ import { hasAkamaiChallenge, isBlocked, isBrowserErrorPage, isCloudflarePage } from "../utils/detect"
++import { waitForDomSettle } from "../utils/domSettle"
+ import { normalizeHtml } from "../utils/html"
+ import { trackMainDocumentResponses } from "../utils/mainResponse"
+ import { captureResponse, isTextContentType } from "../utils/response"
+@@ -100,6 +101,7 @@ export async function runTier2(
+       captchasSolved = result.solved
+     }
+ 
++    await waitForDomSettle(page, maxTimeout - (Date.now() - start))
+     const finalHtml = await page.content()
+     if (isCloudflarePage(finalHtml, mainResponse.headers)) {
+       return { tier: 2, status: "blocked", durationMs: Date.now() - start, reason: "session-expired" }
+diff --git a/packages/tiers/src/tiers/3.ts b/packages/tiers/src/tiers/3.ts
+index a8d9779..3705357 100644
+--- a/packages/tiers/src/tiers/3.ts
++++ b/packages/tiers/src/tiers/3.ts
+@@ -17,6 +17,7 @@ import { normalizeHtml } from "../utils/html"
+ import { waitForImpervaResolution } from "../utils/impervaWait"
+ import { trackMainDocumentResponses } from "../utils/mainResponse"
+ import { isHardNetworkFailure } from "../utils/network"
++import { waitForDomSettle } from "../utils/domSettle"
+ import { captureResponse, isTextContentType } from "../utils/response"
+ import type { RouteLike } from "../utils/sanitize"
+ import { routeContinueOverrides } from "../utils/sanitize"
+@@ -123,6 +124,7 @@ export async function runTier3(
+       captchasSolved = solveResult.solved
+     }
+ 
++    await waitForDomSettle(page, maxTimeout - (Date.now() - start))
+     const html = await page.content()
+ 
+     // Empty shell means the browser got nothing — treat as a load failure
+diff --git a/packages/tiers/src/tiers/4.ts b/packages/tiers/src/tiers/4.ts
+index cfb74dd..9353102 100644
+--- a/packages/tiers/src/tiers/4.ts
++++ b/packages/tiers/src/tiers/4.ts
+@@ -17,6 +17,7 @@ import { normalizeHtml } from "../utils/html"
+ import { waitForImpervaResolution } from "../utils/impervaWait"
+ import { trackMainDocumentResponses } from "../utils/mainResponse"
+ import { isHardNetworkFailure } from "../utils/network"
++import { waitForDomSettle } from "../utils/domSettle"
+ import { captureResponse, isTextContentType } from "../utils/response"
+ import type { RouteLike } from "../utils/sanitize"
+ import { routeContinueOverrides } from "../utils/sanitize"
+@@ -113,6 +114,7 @@ export async function runTier4(
+       captchasSolved = solveResult.solved
+     }
+ 
++    await waitForDomSettle(page, maxTimeout - (Date.now() - start))
+     const html = await page.content()
+ 
+     if (html.length < 100) {
+diff --git a/packages/tiers/src/utils/browserPolicy.ts b/packages/tiers/src/utils/browserPolicy.ts
+new file mode 100644
+index 0000000..6db0bf7
+--- /dev/null
++++ b/packages/tiers/src/utils/browserPolicy.ts
+@@ -0,0 +1,53 @@
++import { readFileSync } from "node:fs"
++
++interface BrowserPolicy {
++  schemaVersion: 1
++  patterns: string[]
++}
++
++const MATCH_PATTERN = /^(\*|https?|file|ftp):\/\/([^/]+)(\/.*)$/
++
++function loadPatterns(): string[] {
++  const policyPath = process.env.TRAWL_FORCE_BROWSER_PATTERNS_FILE
++  if (!policyPath) return []
++  const policy = JSON.parse(readFileSync(policyPath, "utf8")) as BrowserPolicy
++  if (
++    policy.schemaVersion !== 1 ||
++    !Array.isArray(policy.patterns) ||
++    policy.patterns.some((item) => typeof item !== "string")
++  ) {
++    throw new Error(`Invalid browser policy file: ${policyPath}`)
++  }
++  return policy.patterns
++}
++
++const patterns = loadPatterns()
++
++function matchesPattern(pattern: string, rawUrl: string): boolean {
++  if (pattern === "<all_urls>") return /^(https?|file|ftp):/.test(rawUrl)
++  const match = MATCH_PATTERN.exec(pattern)
++  if (!match) return false
++  let url: URL
++  try {
++    url = new URL(rawUrl)
++  } catch {
++    return false
++  }
++  const [, scheme, hostPattern, pathPattern] = match
++  if (scheme !== "*" && url.protocol !== `${scheme}:`) return false
++  if (scheme === "*" && url.protocol !== "http:" && url.protocol !== "https:") return false
++  const hostname = url.hostname.toLowerCase()
++  const wantedHost = hostPattern.toLowerCase()
++  if (wantedHost.startsWith("*.")) {
++    const root = wantedHost.slice(2)
++    if (hostname !== root && !hostname.endsWith(`.${root}`)) return false
++  } else if (wantedHost !== "*" && hostname !== wantedHost) {
++    return false
++  }
++  const escaped = pathPattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")
++  return new RegExp(`^${escaped}$`).test(`${url.pathname}${url.search}`)
++}
++
++export function shouldForceBrowser(url: string): boolean {
++  return patterns.some((pattern) => matchesPattern(pattern, url))
++}
+diff --git a/packages/tiers/src/utils/domSettle.ts b/packages/tiers/src/utils/domSettle.ts
+new file mode 100644
+index 0000000..7ad5ea2
+--- /dev/null
++++ b/packages/tiers/src/utils/domSettle.ts
+@@ -0,0 +1,61 @@
++// Wait for extension/content-script mutations to stop before serializing the DOM.
++// Disabled unless TRAWL_DOM_SETTLE_MAX_MS is greater than zero.
++// biome-ignore lint/suspicious/noExplicitAny: camoufox-js does not export its Page type
++export async function waitForDomSettle(page: any, budgetMs: number): Promise<void> {
++  const configuredMax = Number(process.env.TRAWL_DOM_SETTLE_MAX_MS ?? 0)
++  if (!Number.isFinite(configuredMax) || configuredMax <= 0 || budgetMs <= 0) return
++
++  const maxMs = Math.max(0, Math.min(configuredMax, budgetMs))
++  const minMs = Math.max(0, Number(process.env.TRAWL_DOM_SETTLE_MIN_MS ?? 1_000))
++  const stableMs = Math.max(0, Number(process.env.TRAWL_DOM_SETTLE_STABLE_MS ?? 750))
++  const pollMs = Math.max(50, Number(process.env.TRAWL_DOM_SETTLE_POLL_MS ?? 250))
++  const started = Date.now()
++  let stableSince = started
++  let previous = ""
++
++  while (Date.now() - started < maxMs) {
++    const signature = await page
++      .evaluate(() => {
++        type MutationState = { observer: MutationObserver; version: number }
++        const stateWindow = window as typeof window & { __trawlMutationState?: MutationState }
++        if (!stateWindow.__trawlMutationState) {
++          const state: MutationState = {
++            version: 0,
++            observer: new MutationObserver(() => {
++              state.version++
++            }),
++          }
++          if (document.documentElement) {
++            state.observer.observe(document.documentElement, {
++              attributes: true,
++              childList: true,
++              subtree: true,
++            })
++          }
++          stateWindow.__trawlMutationState = state
++        }
++        return `${stateWindow.__trawlMutationState.version}:${document.documentElement?.outerHTML.length ?? 0}`
++      })
++      .catch(() => "")
++
++    if (signature !== previous) {
++      previous = signature
++      stableSince = Date.now()
++    }
++    const elapsed = Date.now() - started
++    if (elapsed >= minMs && Date.now() - stableSince >= stableMs) break
++    await new Promise((resolve) =>
++      setTimeout(resolve, Math.min(pollMs, Math.max(0, maxMs - elapsed))),
++    )
++  }
++
++  await page
++    .evaluate(() => {
++      const stateWindow = window as typeof window & {
++        __trawlMutationState?: { observer: MutationObserver }
++      }
++      stateWindow.__trawlMutationState?.observer.disconnect()
++      delete stateWindow.__trawlMutationState
++    })
++    .catch(() => {})
++}

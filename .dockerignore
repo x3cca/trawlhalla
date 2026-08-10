@@ -1,0 +1,10 @@
+*
+!.build/
+!.build/addons/
+!.build/addons/**
+!.build/runtime/
+!.build/runtime/**
+!.build/licenses/
+!.build/licenses/**
+!integration/
+!integration/Dockerfile

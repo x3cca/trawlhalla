@@ -1,0 +1,14 @@
+diff --git a/background.js b/background.js
+--- a/background.js
++++ b/background.js
+@@ -227,6 +227,9 @@ var ext_path = 'https://gitflic.ru/project/magnolia1234/bpc_updates/blob/raw?fi
+ var sites_updated_json = 'sites_updated.json';
+ var sites_updated_json_online = ext_path + sites_updated_json;
+-var self_hosted = !!(manifestData.update_url || (manifestData.browser_specific_settings && manifestData.browser_specific_settings.gecko.update_url));
++// Trawlhalla removes the manifest updater so the hash-verified XPI cannot change at
++// runtime. The bundled artifact is still self-hosted; updates happen only by advancing
++// upstream.lock.json and rebuilding the image.
++var self_hosted = true;
+ 
+ function clear_sites_updated() {
+   ext_api.storage.local.set({

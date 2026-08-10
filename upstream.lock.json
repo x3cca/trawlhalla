@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "trawl": {
+    "repository": "https://github.com/germondai/trawl.git",
+    "branch": "dev",
+    "commit": "85381c0e3d2b1744784e81db52eabac01105eb67"
+  },
+  "bpc": {
+    "repository": "https://gitflic.ru/project/magnolia1234/bpc_uploads.git",
+    "branch": "main",
+    "commit": "8bef15fb58a332cb97233a5525b318731e2c5793",
+    "artifact": "bypass_paywalls_clean-4.4.1.6.xpi",
+    "version": "4.4.1.6",
+    "sha256": "7eda0e0abc2c5d012740843361f197803546f0407738882add52b82e024e79af"
+  }
+}

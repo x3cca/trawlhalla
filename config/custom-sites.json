@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "observeMs": 10000
+  },
+  "sites": [
+    {
+      "id": "example-news",
+      "enabled": false,
+      "description": "Disabled example showing the supported custom-site actions.",
+      "matches": [
+        "*://*.example.com/*"
+      ],
+      "forceBrowser": true,
+      "cookies": {
+        "remove": [
+          "meter_count"
+        ]
+      },
+      "network": {
+        "permissions": [
+          "*://*.example.com/*"
+        ],
+        "block": [
+          "https?://[^/]+/paywall(?:/|\\?|$)"
+        ],
+        "requestHeaders": {}
+      },
+      "actions": {
+        "remove": [
+          ".paywall-overlay"
+        ],
+        "unwrap": [],
+        "unhide": [
+          "article"
+        ],
+        "removeClasses": [
+          {
+            "selector": "body",
+            "classes": [
+              "modal-open"
+            ]
+          }
+        ],
+        "removeAttributes": [
+          {
+            "selector": "article",
+            "attributes": [
+              "hidden",
+              "aria-hidden",
+              "style"
+            ]
+          }
+        ],
+        "setAttributes": [],
+        "styles": [
+          {
+            "selector": "body",
+            "properties": {
+              "overflow": "auto"
+            }
+          }
+        ],
+        "click": []
+      },
+      "module": "example-news.js"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+diff --git a/packages/browser/src/pool.ts b/packages/browser/src/pool.ts
+index 067e946..e5b07c9 100644
+--- a/packages/browser/src/pool.ts
++++ b/packages/browser/src/pool.ts
+@@ -195,6 +195,13 @@ export class BrowserPool {
+   ): Promise<{ browser: Browser; context: BrowserContext }> {
+     if (this.browserFactory) return this.browserFactory()
+ 
++    // Optional unpacked WebExtension directories. Keeping this environment-driven
++    // lets downstream distributions add extensions without vendoring them into Trawl.
++    const addonDirs = (process.env.CAMOUFOX_ADDON_DIRS ?? "")
++      .split(",")
++      .map((value) => value.trim())
++      .filter(Boolean)
++
+     // Map our platform token → Camoufox's `os` token.
+     const camoufoxOs =
+       fingerprint.platform === "Win32" ? "windows" : fingerprint.platform === "MacIntel" ? "macos" : "linux"
+@@ -219,6 +226,7 @@ export class BrowserPool {
+     const browser = await Camoufox({
+       headless: true,
+       os: [camoufoxOs],
++      ...(addonDirs.length > 0 ? { addons: addonDirs } : {}),
+       // Screen + window randomization — Camoufox picks from the constraints per launch.
+       // `screen` lets us set min/max bounds; `window` is a single fixed tuple per type
+       // so we pick one realistic value here. The fingerprint will still differ across
+

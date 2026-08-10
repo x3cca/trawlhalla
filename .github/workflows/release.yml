@@ -1,0 +1,238 @@
+name: Release image
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out pinned upstreams
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6f # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Resolve build identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(jq -r '.version' package.json)"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            expected_tag="v${package_version}"
+            if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
+              echo "Release tag ${GITHUB_REF_NAME} does not match package version ${expected_tag}" >&2
+              exit 1
+            fi
+            release_tag="${GITHUB_REF_NAME}"
+            image_tag="${GITHUB_REF_NAME}"
+          else
+            release_tag=""
+            image_tag="ci-${GITHUB_SHA::12}"
+          fi
+          echo "release_tag=${release_tag}" >> "${GITHUB_OUTPUT}"
+          echo "image_ref=trawlhalla:${image_tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${package_version}" >> "${GITHUB_OUTPUT}"
+          echo "created=$(git show -s --format=%cI "${GITHUB_SHA}")" >> "${GITHUB_OUTPUT}"
+
+      - name: Install and verify
+        run: |
+          bun install --frozen-lockfile
+          bun run verify
+
+      - name: Read upstream lock
+        id: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "trawl_commit=$(jq -r '.trawl.commit' upstream.lock.json)" >> "${GITHUB_OUTPUT}"
+          echo "bpc_commit=$(jq -r '.bpc.commit' upstream.lock.json)" >> "${GITHUB_OUTPUT}"
+          echo "bpc_version=$(jq -r '.bpc.version' upstream.lock.json)" >> "${GITHUB_OUTPUT}"
+          echo "bpc_sha256=$(jq -r '.bpc.sha256' upstream.lock.json)" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build cached Trawl base
+        id: base
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .build/trawl
+          file: .build/trawl/apps/api/Dockerfile
+          platforms: linux/amd64
+          build-args: TARGETARCH=amd64
+          outputs: type=oci,dest=.build/oci-base,tar=false,name=trawlhalla-base
+          cache-from: type=gha,scope=trawlhalla-base-linux-amd64
+          cache-to: type=gha,mode=max,scope=trawlhalla-base-linux-amd64
+          provenance: false
+
+      - name: Build release image
+        id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: integration/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: ${{ steps.identity.outputs.image_ref }}
+          build-contexts: trawlhalla-base=oci-layout://${{ github.workspace }}/.build/oci-base@${{ steps.base.outputs.digest }}
+          build-args: |
+            TRAWL_BASE_IMAGE=trawlhalla-base
+            TRAWL_COMMIT=${{ steps.upstream.outputs.trawl_commit }}
+            BPC_COMMIT=${{ steps.upstream.outputs.bpc_commit }}
+            BPC_VERSION=${{ steps.upstream.outputs.bpc_version }}
+            BPC_SHA256=${{ steps.upstream.outputs.bpc_sha256 }}
+            TRAWLHALLA_VERSION=${{ steps.identity.outputs.version }}
+            TRAWLHALLA_REVISION=${{ github.sha }}
+            TRAWLHALLA_CREATED=${{ steps.identity.outputs.created }}
+          cache-from: type=gha,scope=trawlhalla-final-linux-amd64
+          cache-to: type=gha,mode=max,scope=trawlhalla-final-linux-amd64
+          provenance: false
+
+      - name: Smoke-test API and browser tier
+        env:
+          IMAGE_REF: ${{ steps.identity.outputs.image_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if [[ ${status} -ne 0 ]]; then docker logs trawlhalla-ci || true; fi
+            docker rm --force trawlhalla-ci >/dev/null 2>&1 || true
+            exit "${status}"
+          }
+          trap cleanup EXIT
+          docker run --detach --name trawlhalla-ci \
+            --publish 127.0.0.1:8191:8191 \
+            --shm-size 1g \
+            --tmpfs /tmp:size=1g \
+            --env BROWSER_POOL_SIZE=1 \
+            "${IMAGE_REF}"
+          ready=false
+          for _ in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:8191/health | jq -e '.status == "ok"' >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "${ready}" != "true" ]]; then
+            echo "Trawlhalla did not become healthy" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 60 \
+            --header 'content-type: application/json' \
+            --data '{"url":"https://example.com/","skipHttp":true,"maxTier":3,"maxTimeout":45000}' \
+            http://127.0.0.1:8191/scrape > /tmp/trawlhalla-smoke.json
+          jq -e '.statusCode == 200 and .tier == 3 and (.html | contains("Example Domain"))' \
+            /tmp/trawlhalla-smoke.json >/dev/null
+
+      - name: Create image archive
+        env:
+          IMAGE_REF: ${{ steps.identity.outputs.image_ref }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+          BUILD_DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          docker save --output dist/trawlhalla-linux-amd64.tar "${IMAGE_REF}"
+          archive_size="$(stat --format=%s dist/trawlhalla-linux-amd64.tar)"
+          if (( archive_size >= 2147483648 )); then
+            echo "Image archive is not under GitHub's 2 GiB per-asset limit" >&2
+            exit 1
+          fi
+          archive_sha="$(sha256sum dist/trawlhalla-linux-amd64.tar | cut -d ' ' -f 1)"
+          image_id="$(docker image inspect --format '{{.Id}}' "${IMAGE_REF}")"
+          jq \
+            --arg releaseTag "${RELEASE_TAG:-manual}" \
+            --arg sourceCommit "${GITHUB_SHA}" \
+            --arg imageReference "${IMAGE_REF}" \
+            --arg imageId "${image_id}" \
+            --arg manifestDigest "${BUILD_DIGEST}" \
+            --arg archiveSha256 "${archive_sha}" \
+            '{
+              schemaVersion: 1,
+              releaseTag: $releaseTag,
+              sourceCommit: $sourceCommit,
+              platform: "linux/amd64",
+              image: {
+                reference: $imageReference,
+                id: $imageId,
+                manifestDigest: $manifestDigest,
+                archiveSha256: $archiveSha256
+              },
+              upstreams: {trawl: .trawl, bpc: .bpc}
+            }' upstream.lock.json > dist/image-metadata.json
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.identity.outputs.image_ref }}
+          format: spdx-json
+          output-file: dist/trawlhalla-linux-amd64.spdx.json
+          upload-artifact: false
+
+      - name: Write checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum \
+            trawlhalla-linux-amd64.tar \
+            trawlhalla-linux-amd64.spdx.json \
+            image-metadata.json > SHA256SUMS
+
+      - name: Attest image archive
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: dist/trawlhalla-linux-amd64.tar
+
+      - name: Publish immutable-by-policy release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.identity.outputs.release_tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing="$(gh release view "${RELEASE_TAG}" --json isDraft --jq '.isDraft' 2>/dev/null || true)"
+          if [[ -n "${existing}" && "${existing}" != "true" ]]; then
+            echo "Published release ${RELEASE_TAG} already exists; refusing to replace its assets" >&2
+            exit 1
+          fi
+          if [[ -z "${existing}" ]]; then
+            gh release create "${RELEASE_TAG}" \
+              --verify-tag \
+              --draft \
+              --generate-notes \
+              --title "Trawlhalla ${RELEASE_TAG}"
+          fi
+          gh release upload "${RELEASE_TAG}" dist/* --clobber
+          gh release edit "${RELEASE_TAG}" --draft=false --latest

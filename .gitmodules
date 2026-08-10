@@ -1,0 +1,8 @@
+[submodule "upstream/trawl"]
+	path = upstream/trawl
+	url = https://github.com/germondai/trawl.git
+	branch = dev
+[submodule "upstream/bpc-uploads"]
+	path = upstream/bpc-uploads
+	url = https://gitflic.ru/project/magnolia1234/bpc_uploads.git
+	branch = main

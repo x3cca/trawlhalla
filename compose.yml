@@ -1,0 +1,11 @@
+services:
+  trawlhalla:
+    image: trawlhalla:local
+    restart: unless-stopped
+    ports:
+      - "8191:8191"
+    environment:
+      BROWSER_POOL_SIZE: "2"
+    tmpfs:
+      - /tmp:size=1g
+    shm_size: 1gb
