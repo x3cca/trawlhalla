@@ -8,9 +8,9 @@
   "bpc": {
     "repository": "https://gitflic.ru/project/magnolia1234/bpc_uploads.git",
     "branch": "main",
-    "commit": "84abf0c145ba5fc56d54e02d8cef0776ebb39d7e",
-    "artifact": "bypass_paywalls_clean-4.4.1.6.xpi",
-    "version": "4.4.1.6",
-    "sha256": "7eda0e0abc2c5d012740843361f197803546f0407738882add52b82e024e79af"
+    "commit": "e23bb290fee4ae9dd0d9dc0e4109cf64cfd72599",
+    "artifact": "bypass_paywalls_clean-4.4.2.2.xpi",
+    "version": "4.4.2.2",
+    "sha256": "51d1f1e13441e69e99fae3f20d9fa93e4e4438c007ea524dc18c52847bb687c1"
   }
 }
