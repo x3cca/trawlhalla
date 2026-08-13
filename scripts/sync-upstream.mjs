@@ -7,7 +7,7 @@ if (target !== "trawl" && target !== "bpc") throw new Error("Usage: bun scripts/
 
 const lock = await readLock()
 const relativePath = target === "trawl" ? "upstream/trawl" : "upstream/bpc-uploads"
-run("git", ["submodule", "update", "--remote", relativePath])
+run("git", ["submodule", "update", "--init", "--remote", "--recursive", relativePath])
 
 if (target === "trawl") {
   lock.trawl.commit = submoduleCommit(relativePath)
