@@ -8,7 +8,7 @@
   "bpc": {
     "repository": "https://gitflic.ru/project/magnolia1234/bpc_uploads.git",
     "branch": "main",
-    "commit": "e23bb290fee4ae9dd0d9dc0e4109cf64cfd72599",
+    "commit": "c9ba4b5382ca3b584cad19005e32313da7eda9d4",
     "artifact": "bypass_paywalls_clean-4.4.2.2.xpi",
     "version": "4.4.2.2",
     "sha256": "51d1f1e13441e69e99fae3f20d9fa93e4e4438c007ea524dc18c52847bb687c1"
