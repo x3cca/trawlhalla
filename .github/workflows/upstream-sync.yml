@@ -5,23 +5,19 @@ on:
   schedule:
     - cron: "17 9 * * *"
 
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
   sync:
-    name: Sync ${{ matrix.label }}
+    name: Sync upstreams
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - upstream: trawl
-            label: Trawl
-          - upstream: bpc
-            label: BPC Firefox extension
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,59 +26,88 @@ jobs:
         with:
           bun-version: 1.3.14
       - run: bun install --frozen-lockfile --ignore-scripts
-      - name: Initialize unchanged upstream
-        env:
-          UPSTREAM: ${{ matrix.upstream }}
-        shell: bash
-        run: |
-          if [ "$UPSTREAM" = "trawl" ]; then
-            git submodule update --init --recursive upstream/bpc-uploads
-          else
-            git submodule update --init --recursive upstream/trawl
-          fi
-      - name: Advance one upstream
-        run: bun run sync:${{ matrix.upstream }}
-      - name: Verify integration
-        run: bun run verify
-      - name: Open separate update PR
+      - name: Find pending update PRs
+        id: pending
         env:
           GH_TOKEN: ${{ github.token }}
-          UPSTREAM: ${{ matrix.upstream }}
         shell: bash
         run: |
+          set -euo pipefail
+          echo "bpc=false" >> "${GITHUB_OUTPUT}"
+          echo "trawl=false" >> "${GITHUB_OUTPUT}"
+          heads="$(gh pr list --state open --limit 100 --json headRefName,mergeStateStatus --jq '.[] | select(.mergeStateStatus != "DIRTY") | .headRefName')"
+          for upstream in bpc trawl; do
+            if grep -Eq "^sync/${upstream}-" <<< "${heads}"; then
+              echo "${upstream}=true" >> "${GITHUB_OUTPUT}"
+              echo "Pending ${upstream} update PR found"
+            fi
+          done
+      - name: Sync BPC Firefox extension
+        id: bpc
+        if: steps.pending.outputs.bpc != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SYNC_TARGET=bpc" >> "${GITHUB_ENV}"
+          git submodule update --init --recursive upstream/trawl
+          bun run sync:bpc
+          bun run verify
           if git diff --quiet && git diff --cached --quiet; then
-            echo "No ${UPSTREAM} update"
-            exit 0
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
           fi
+      - name: Sync Trawl
+        id: trawl
+        if: >-
+          steps.pending.outputs.trawl != 'true' &&
+          (steps.pending.outputs.bpc == 'true' || steps.bpc.outputs.changed != 'true')
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SYNC_TARGET=trawl" >> "${GITHUB_ENV}"
+          bun run sync:trawl
+          bun run verify
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+      - name: Open separate update PR
+        if: steps.bpc.outputs.changed == 'true' || steps.trawl.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BPC_CHANGED: ${{ steps.bpc.outputs.changed }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${BPC_CHANGED}" = "true" ]; then upstream="bpc"; else upstream="trawl"; fi
           stamp="$(date -u +%Y%m%d-%H%M%S)"
-          branch="sync/${UPSTREAM}-${stamp}"
+          branch="sync/${upstream}-${stamp}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git add upstream.lock.json
-          if [ "$UPSTREAM" = "trawl" ]; then
+          if [ "$upstream" = "trawl" ]; then
             git add upstream/trawl
           else
-            git add upstream/bpc-uploads
+            git add upstream/bpc-uploads vendor/bpc
           fi
-          git commit -m "chore: sync ${UPSTREAM} upstream"
+          git commit -m "chore: sync ${upstream} upstream"
           git push --set-upstream origin "$branch"
           gh pr create \
             --base main \
             --head "$branch" \
-            --title "chore: sync ${UPSTREAM} upstream" \
+            --title "chore: sync ${upstream} upstream" \
             --body "Automated single-upstream update. Verification passed; review the lock, permission, and patch changes before merging."
       - name: Record failed sync for the agent queue
         if: failure()
-        env:
-          UPSTREAM: ${{ matrix.upstream }}
-          LABEL: ${{ matrix.label }}
         shell: bash
         run: |
           {
-            echo "## ${LABEL} sync needs integration work"
+            echo "## ${SYNC_TARGET:-Upstream} sync needs integration work"
             echo
-            echo "The automated ${UPSTREAM} update did not pass its integration gates."
+            echo "The automated ${SYNC_TARGET:-upstream} update did not pass its integration gates."
             echo "Use this failed job and its logs as the maintenance queue item; no update PR was opened."
             echo
             echo '```text'
