@@ -127,11 +127,9 @@ export async function buildCustomExtension(config, outputDir) {
 export async function prepare() {
   const lock = await readLock()
   const trawlCommit = submoduleCommit("upstream/trawl")
-  const bpcCommit = submoduleCommit("upstream/bpc-uploads")
   if (trawlCommit !== lock.trawl.commit) throw new Error(`Trawl lock mismatch: ${trawlCommit} != ${lock.trawl.commit}`)
-  if (bpcCommit !== lock.bpc.commit) throw new Error(`BPC lock mismatch: ${bpcCommit} != ${lock.bpc.commit}`)
 
-  const xpiPath = path.join(rootDir, "upstream", "bpc-uploads", lock.bpc.artifact)
+  const xpiPath = path.join(rootDir, "vendor", "bpc", lock.bpc.artifact)
   const actualHash = await sha256(xpiPath)
   if (actualHash !== lock.bpc.sha256) throw new Error(`BPC hash mismatch: ${actualHash} != ${lock.bpc.sha256}`)
 
@@ -167,7 +165,7 @@ export async function prepare() {
     schemaVersion: 1,
     generatedFrom: {
       trawlCommit,
-      bpcCommit,
+      bpcCommit: lock.bpc.commit,
       bpcVersion: bpcManifest.version,
       customConfig: "config/custom-sites.json",
     },

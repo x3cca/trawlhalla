@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises"
+import { copyFile, mkdir, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { latestBpcArtifact, readLock, rootDir, run, sha256, submoduleCommit, xpiManifest } from "./lib.mjs"
 
@@ -23,6 +23,10 @@ if (target === "trawl") {
   lock.bpc.artifact = latest.name
   lock.bpc.version = latest.version
   lock.bpc.sha256 = await sha256(artifactPath)
+  const vendorDirectory = path.join(rootDir, "vendor", "bpc")
+  await rm(vendorDirectory, { recursive: true, force: true })
+  await mkdir(vendorDirectory, { recursive: true })
+  await copyFile(artifactPath, path.join(vendorDirectory, latest.name))
 }
 
 await writeFile(path.join(rootDir, "upstream.lock.json"), `${JSON.stringify(lock, null, 2)}\n`)

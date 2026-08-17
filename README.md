@@ -3,7 +3,7 @@
 Trawlhalla is a reproducible integration layer around two independently tracked upstreams:
 
 - [Trawl](https://github.com/x3cca/trawl/tree/codex/aws-waf-captcha), temporarily pinned to the fork's AWS WAF challenge fix while it is reviewed upstream, providing the API, browser pool, tier orchestration and Camoufox runtime.
-- [Bypass Paywalls Clean Firefox uploads](https://gitflic.ru/project/magnolia1234/bpc_uploads), providing the pinned Firefox extension artifact.
+- [Bypass Paywalls Clean Firefox uploads](https://gitflic.ru/project/magnolia1234/bpc_uploads), providing the source for the pinned Firefox extension artifact. The versioned XPI is copied to `vendor/bpc` so builds do not depend on GitFlic retaining historical commits.
 
 It also generates a separate Firefox extension from `config/custom-sites.json`. Local site support therefore does not require editing BPC or either upstream submodule.
 
@@ -18,8 +18,9 @@ podman machine start
 ```
 
 ```powershell
-git clone --recurse-submodules https://github.com/x3cca/trawlhalla.git
+git clone https://github.com/x3cca/trawlhalla.git
 cd trawlhalla
+git submodule update --init --recursive upstream/trawl
 bun install --frozen-lockfile
 bun run verify
 bun run build:image
@@ -84,11 +85,11 @@ bun run sync:bpc
 bun run verify
 ```
 
-Each command advances one submodule and updates `upstream.lock.json`. Commit Trawl and BPC updates separately. CI also checks for updates on a schedule and opens separate PRs.
+Each command advances one submodule and updates `upstream.lock.json`. BPC sync also replaces the versioned artifact under `vendor/bpc`; builds verify that file against the locked SHA-256. Commit Trawl and BPC updates separately. CI also checks for updates on a schedule and opens separate PRs.
 
-The scheduled `Upstream sync` workflow runs daily as independent `Sync Trawl` and `Sync BPC Firefox extension` jobs. A compatible update opens a focused PR. An incompatible update leaves the corresponding job failed, adds a diagnostic job summary, and opens no PR; that failed run is the intended queue item for an integration-fix agent.
+The scheduled `Upstream sync` workflow runs daily, avoids duplicating pending upstream PRs, and checks BPC before Trawl. A compatible update opens a focused PR. An incompatible update leaves the job failed, adds a diagnostic job summary, and opens no PR; that failed run is the intended queue item for an integration-fix agent.
 
-Never edit files under `upstream/` directly. Integration changes belong in `patches/trawl/`, `patches/bpc/`, `extensions/`, `config/`, or `scripts/`.
+Never edit files under `upstream/` or `vendor/bpc/` directly. The BPC sync script owns the vendored XPI. Integration changes belong in `patches/trawl/`, `patches/bpc/`, `extensions/`, `config/`, or `scripts/`.
 
 ## Build products
 
